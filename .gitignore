@@ -1,0 +1,34 @@
+# created by virtualenv automatically
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# dotenv files (но .env.example оставить можно)
+.env
+
+# yt-dlp cache
+*.part
+*.fuse_hidden*
+.ytdl
+.cache/
+cookies.txt
+
+# Downloads (если хочешь чтобы люди сами качали после запуска)
+bot/downloads/
+
+# IDE configs
+.idea/
+*.iml
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
