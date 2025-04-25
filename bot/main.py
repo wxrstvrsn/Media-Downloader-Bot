@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 # Загрузка переменных окружения
 load_dotenv()
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 PUBLIC_URL = os.getenv("PUBLIC_URL")
 LAST_USER_URL = os.getenv("LAST_USER_URL")
