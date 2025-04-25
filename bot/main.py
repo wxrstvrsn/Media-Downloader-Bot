@@ -84,23 +84,23 @@ async def catch_url(message: types.Message):
         await message.answer("❌ Не удалось получить форматы видео.")
         return
 
-    kb = InlineKeyboardMarkup(row_width=2)
-    for fmt in formats:
-        btn_text = f"{fmt['resolution']} ({fmt['ext']})"
-        kb.add(
-            InlineKeyboardButton(
-                text=btn_text,
-                callback_data=f"format:{url}:{fmt['format_id']}"
-            )
-        )
-    kb.add(
-        InlineKeyboardButton(
-            text="🎵 Только аудио (best)",
-            callback_data=f"format:{url}:bestaudio"
-        )
-    )
+    seen = set()
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
 
-    await message.answer("🎬 Выберите формат для скачивания:", reply_markup=kb)
+    for fmt in formats:
+        resolution = fmt["resolution"]
+        ext = fmt["ext"]
+        key = f"{resolution}_{ext}"
+        if key in seen:
+            continue
+        seen.add(key)
+        button = InlineKeyboardButton(
+            text=f"{resolution} .{ext}",
+            callback_data=f"{resolution}:{ext}"
+        )
+        kb.inline_keyboard.append([button])
+
+    await message.answer("🔻 Выбери качество и формат:", reply_markup=kb)
 
 @dp.callback_query(lambda c: c.data.startswith("format:"))
 async def process_choice(call: CallbackQuery):
