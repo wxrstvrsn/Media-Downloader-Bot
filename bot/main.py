@@ -1,110 +1,132 @@
-﻿import os
+﻿import asyncio
 import logging
-import asyncio
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+import os
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiohttp import web
 from downloader import get_video_formats, download_video
-from dotenv import load_dotenv
 
-# Загрузка переменных окружения
-load_dotenv()
+# Конфиг
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "downloads")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
+DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "bot/downloads")
 PUBLIC_URL = os.getenv("PUBLIC_URL")
-LAST_USER_URL = os.getenv("LAST_USER_URL")
-LAST_USER_FORMAT = os.getenv("LAST_USER_FORMAT")
-LAST_CHAT_ID = os.getenv("LAST_CHAT_ID")
+BIND_HOST = os.getenv("BIND_HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", 8000))
 
+# Логирование
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Бот
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-user_links = {}
-
-
+# Web-сервер для раздачи файлов
 async def start_web_app():
     app = web.Application()
-    app.router.add_static("/downloads", DOWNLOAD_DIR, show_index=True)
+    app.router.add_static('/downloads', DOWNLOAD_DIR, show_index=False)  # ЗАПРЕТИТЬ листинг файлов
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 8000)
+    site = web.TCPSite(runner, BIND_HOST, PORT)
     await site.start()
     logger.info(f"Web server started at {PUBLIC_URL}/downloads")
 
+# Состояние выбора формата
+user_requests = {}
 
-@dp.message(F.text.startswith("http"))
-async def handle_url(message: types.Message):
+@dp.message(Command("start"))
+async def start_handler(message: types.Message):
+    await message.answer("👋 Отправьте ссылку на видео!")
+
+@dp.message(Command("bigDickBackInTown"))
+async def admin_command(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ Доступ запрещён.")
+        return
+
+    files = os.listdir(DOWNLOAD_DIR)
+    if not files:
+        await message.answer("📂 Папка downloads пуста.")
+        return
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    for filename in files:
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"🗑️ {filename}",
+                callback_data=f"delete:{filename}"
+            )
+        ])
+
+    await message.answer("🧾 Список файлов в downloads:", reply_markup=kb)
+
+@dp.callback_query(lambda c: c.data.startswith("delete:"))
+async def delete_file_callback(callback_query: CallbackQuery):
+    filename = callback_query.data.split("delete:")[1]
+    file_path = os.path.join(DOWNLOAD_DIR, filename)
+
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        await callback_query.message.answer(f"✅ Файл {filename} удалён.")
+    else:
+        await callback_query.message.answer(f"⚠️ Файл {filename} не найден.")
+    await callback_query.answer()
+
+@dp.message()
+async def catch_url(message: types.Message):
     url = message.text.strip()
-    user_links[message.from_user.id] = {
-        "url": url,
-        "chat_id": message.chat.id
-    }
-    await send_format_buttons(message.chat.id, url)
 
-
-async def send_format_buttons(chat_id: int, url: str):
+    await message.answer("🔎 Ищу доступные форматы...")
     formats = get_video_formats(url)
     if not formats:
-        await bot.send_message(chat_id=chat_id, text="❌ Не удалось получить форматы видео.")
+        await message.answer("❌ Не удалось получить форматы видео.")
         return
 
-    kb = InlineKeyboardBuilder()
+    kb = InlineKeyboardMarkup(row_width=2)
     for fmt in formats:
-        label = f"{fmt['resolution']} .{fmt['ext']}"
-        kb.button(
-            text=label,
-            callback_data=f"dl|{fmt['format_id']}|{fmt['ext']}"
+        btn_text = f"{fmt['resolution']} ({fmt['ext']})"
+        kb.add(
+            InlineKeyboardButton(
+                text=btn_text,
+                callback_data=f"format:{url}:{fmt['format_id']}"
+            )
         )
-    kb.adjust(2)
-    await bot.send_message(chat_id=chat_id, text="Выберите качество и формат:", reply_markup=kb.as_markup())
+    kb.add(
+        InlineKeyboardButton(
+            text="🎵 Только аудио (best)",
+            callback_data=f"format:{url}:bestaudio"
+        )
+    )
 
+    await message.answer("🎬 Выберите формат для скачивания:", reply_markup=kb)
 
-@dp.callback_query(F.data.startswith("dl|"))
-async def process_choice(call: types.CallbackQuery):
-    _, format_id, ext = call.data.split("|")
-    user_id = call.from_user.id
-    user_data = user_links.get(user_id)
+@dp.callback_query(lambda c: c.data.startswith("format:"))
+async def process_choice(call: CallbackQuery):
+    await call.answer()
 
-    if not user_data:
-        await call.message.answer("❌ Не удалось определить ссылку.")
-        return
+    parts = call.data.split(":")
+    url = parts[1]
+    format_id = parts[2]
 
-    url = user_data["url"]
-    chat_id = user_data["chat_id"]
+    chat_id = call.message.chat.id
 
-    # сохраняем выбор
-    os.environ["LAST_USER_URL"] = url
-    os.environ["LAST_USER_FORMAT"] = format_id
-    os.environ["LAST_CHAT_ID"] = str(chat_id)
-    with open(".env", "a") as f:
-        f.write(f"\nLAST_USER_URL={url}\nLAST_USER_FORMAT={format_id}\nLAST_CHAT_ID={chat_id}\n")
+    await bot.send_message(chat_id, "⏬ Загружаю ваш файл...")
 
-    filepath = download_video(url, format_id, ext)
-    if not filepath:
-        await bot.send_message(chat_id=chat_id, text="❌ Не удалось скачать видео.")
-        return
-
-    filename = os.path.basename(filepath)
-    link = f"{PUBLIC_URL}/downloads/{filename}"
-    kb = InlineKeyboardBuilder()
-    kb.button(text="⬇️ Скачать видео", url=link)
-    await bot.send_message(chat_id=chat_id, text=f"✅ Ваш файл готов!\nНазвание: {filename}", reply_markup=kb.as_markup())
-
-
-async def try_resume_download():
-    if LAST_USER_URL and LAST_USER_FORMAT and LAST_CHAT_ID:
-        logger.info("[main.py] Восстановление после сбоя ngrok: повторная загрузка...")
-        await send_format_buttons(int(LAST_CHAT_ID), LAST_USER_URL)
-
+    filepath, filename = download_video(url, format_id, DOWNLOAD_DIR)
+    if filepath:
+        file_url = f"{PUBLIC_URL}/downloads/{filename}"
+        kb = InlineKeyboardMarkup().add(
+            InlineKeyboardButton(text="⬇️ Скачать файл", url=file_url)
+        )
+        await bot.send_message(chat_id=chat_id, text=f"✅ Ваш файл готов!\nНазвание: {filename}", reply_markup=kb)
+    else:
+        await bot.send_message(chat_id, "❌ Ошибка при загрузке файла.")
 
 async def main():
     await start_web_app()
-    await try_resume_download()
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
