@@ -20,7 +20,7 @@ env/
 cookies.txt
 
 # Downloads (если хочешь чтобы люди сами качали после запуска)
-bot/downloads/
+
 
 # IDE configs
 .idea/
