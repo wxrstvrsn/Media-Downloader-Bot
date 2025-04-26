@@ -78,14 +78,15 @@ def download_video(url: str, format_id: str, ext: str):
             os.remove(filepath)
             raise ValueError(f"Файл слишком большой: {final_size/1024**2:.1f} MB")
 
-        ext = ext or "mp4"
-        new_filename = safe_filename(ext)
-        new_path = os.path.join(DOWNLOAD_DIR, new_filename)
+        tempExt = os.path.splitext(filepath)[1]
+
+        new_name = safe_filename(tempExt)
+        new_path = os.path.join(DOWNLOAD_DIR, new_name)
 
         os.rename(filepath, new_path)
 
         logger.info(f"Downloaded successfully: {new_path} ({final_size/1024**2:.1f} MB)")
-        return new_filename
+        return new_name
 
     except Exception as e:
         logger.error(f"Ошибка при загрузке файла: {e}")
