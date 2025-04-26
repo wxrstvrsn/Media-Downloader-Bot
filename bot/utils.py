@@ -28,9 +28,9 @@ def build_formats_keyboard(formats):
     for fmt in formats:
         resolution = fmt.get("resolution")
         ext = fmt.get("ext")
-        itag = fmt.get("itag")
+        itag = fmt.get("format_id")  # тут надо брать format_id!
 
-        if not (resolution and ext and itag):
+        if not resolution or not ext or not itag:
             continue
 
         key = f"{resolution}_{ext}"
