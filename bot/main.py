@@ -105,7 +105,7 @@ async def format_chosen(callback: CallbackQuery):
 
     msg = await callback.message.answer("⏳ Загружаю видео...")
 
-    filename = await download_video(url, itag)
+    filename = download_video(url, itag)
     if filename:
         file_url = f"{PUBLIC_URL}/downloads/{filename}"
         kb = InlineKeyboardMarkup(inline_keyboard=[[
