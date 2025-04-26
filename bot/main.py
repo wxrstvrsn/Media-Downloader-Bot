@@ -105,13 +105,13 @@ async def format_chosen(callback: CallbackQuery):
 
     msg = await callback.message.answer("⏳ Загружаю видео...")
 
-    filename = download_video(url, itag)
-    if filename:
-        file_url = f"{PUBLIC_URL}/downloads/{filename}"
+    saved_name = download_video(url, itag)
+    if saved_name:
+        file_url = f"{PUBLIC_URL}/downloads/{saved_name}"
         kb = InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="📥 Скачать файл", url=file_url)
         ]])
-        await msg.edit_text(f"✅ Файл готов!\n{file_url}", reply_markup=kb)
+        await msg.edit_text(f"✅ Файл готов!\n{saved_name}", reply_markup=kb)
     else:
         await msg.edit_text("❌ Ошибка при загрузке файла.")
 

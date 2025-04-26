@@ -76,9 +76,11 @@ def download_video(url: str, format_id: str):
         new_name = safe_filename(tempExt)
         new_path = os.path.join(DOWNLOAD_DIR, new_name)
 
+        os.makedirs(DOWNLOAD_DIR, exist_ok=True)
         os.rename(filepath, new_path)
 
-        logger.info(f"Downloaded successfully: {new_path} ({final_size/1024**2:.1f} MB)")
+        logger.info(f"Downloaded successfully: {new_path} ({final_size / 1024 ** 2:.1f} MB)")
+
         return new_path
 
     except Exception as e:
