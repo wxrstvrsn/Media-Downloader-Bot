@@ -10,6 +10,9 @@ from config import BOT_TOKEN, ADMIN_ID, ADMIN_COMMAND, DOWNLOAD_DIR, PUBLIC_URL
 from utils import normalize_youtube_url, build_formats_keyboard
 from downloader import download_video, get_video_formats
 
+# Словарь для хранения URL по юзеру
+user_requests = {}
+
 # Логирование
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("bot")
@@ -75,32 +78,42 @@ async def catch_url(message: Message):
         await message.answer("❌ Не удалось получить форматы видео.")
         return
 
-    kb = build_formats_keyboard(formats, url)
-    await message.answer("🔻 Выберите качество и формат:", reply_markup=kb)
+    # Сохраняем URL для пользователя
+    user_requests[message.from_user.id] = url
+
+    keyboard = build_formats_keyboard(formats)
+    await message.answer("🔻 Выберите качество и формат:", reply_markup=keyboard)
 
 # ==== Выбор формата ====
 
 @dp.callback_query(F.data.startswith("format|"))
-async def process_choice(callback: CallbackQuery):
+async def format_chosen(callback: CallbackQuery):
     await callback.answer()
 
-    _, itag, url, ext = callback.data.split("|", 3)
-    progress_message = await callback.message.answer("⏳ Загружаю видео...")
+    parts = callback.data.split("|")
+    if len(parts) != 3:
+        await callback.message.answer("❌ Неверные данные кнопки.")
+        return
 
-    filepath = await download_video(url, itag, ext)
+    _, itag, ext = parts
 
-    if filepath:
-        filename = os.path.basename(filepath)
-        public_url = f"{PUBLIC_URL}/downloads/{filename}"
+    # Получаем URL для этого пользователя
+    url = user_requests.get(callback.from_user.id)
+    if not url:
+        await callback.message.answer("❌ Истекло время выбора. Пожалуйста, отправьте ссылку заново.")
+        return
 
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="📩 Скачать файл", url=public_url)]
-            ]
-        )
-        await progress_message.edit_text(f"✅ Файл готов!\n{public_url}", reply_markup=kb)
+    msg = await callback.message.answer("⏳ Загружаю видео...")
+
+    filename = await download_video(url, itag, ext)
+    if filename:
+        file_url = f"{PUBLIC_URL}/downloads/{filename}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="📥 Скачать файл", url=file_url)
+        ]])
+        await msg.edit_text(f"✅ Файл готов!\n{file_url}", reply_markup=kb)
     else:
-        await progress_message.edit_text("❌ Ошибка при загрузке видео.")
+        await msg.edit_text("❌ Ошибка при загрузке файла.")
 
 # ==== AIOHTTP для отдачи файлов ====
 

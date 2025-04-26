@@ -13,7 +13,7 @@ def normalize_youtube_url(url: str) -> str:
         url = url.replace("m.youtube.com", "youtube.com")
     return url
 
-def build_formats_keyboard(formats, url):
+def build_formats_keyboard(formats):
     """
     Строит клавиатуру с доступными форматами для скачивания.
     """
@@ -33,9 +33,10 @@ def build_formats_keyboard(formats, url):
             continue
         seen.add(key)
 
+        # Короткая callback_data без URL
         button = InlineKeyboardButton(
             text=f"{resolution} .{ext}",
-            callback_data=f"format|{itag}|{url}|{ext}"
+            callback_data=f"format|{itag}|{ext}"
         )
         keyboard.inline_keyboard.append([button])
 
