@@ -1,5 +1,6 @@
 ﻿from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+
 def normalize_youtube_url(url: str) -> str:
     """Приводит ссылку к нормальному виду."""
     url = url.strip()
@@ -13,6 +14,10 @@ def normalize_youtube_url(url: str) -> str:
         url = url.replace("m.youtube.com", "youtube.com")
     return url
 
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+
 def build_formats_keyboard(formats):
     """
     Строит клавиатуру с доступными форматами для скачивания.
@@ -25,7 +30,7 @@ def build_formats_keyboard(formats):
         ext = fmt.get("ext")
         itag = fmt.get("itag")
 
-        if not resolution or not ext or not itag:
+        if not (resolution and ext and itag):
             continue
 
         key = f"{resolution}_{ext}"
@@ -33,7 +38,6 @@ def build_formats_keyboard(formats):
             continue
         seen.add(key)
 
-        # Короткая callback_data без URL
         button = InlineKeyboardButton(
             text=f"{resolution} .{ext}",
             callback_data=f"format|{itag}|{ext}"
