@@ -132,7 +132,7 @@ async def process_choice(call: CallbackQuery):
 
     progress_message = await bot.send_message(chat_id=chat_id, text="⏳ Загружаю файл...")
 
-    filename = download_video(url, format_id, DOWNLOAD_DIR)
+    filename = download_video(url, format_id)
 
     if not filename:
         await progress_message.edit_text("❌ Ошибка загрузки файла.")

@@ -49,19 +49,14 @@ def safe_filename(ext: str) -> str:
     ])
     return f"filename_{total_files + 1}{ext}"
 
-def download_video(url: str, format_id: str, ext: str):
-    """
-    Скачивает выбранное видео с лучшим аудио и объединяет их в один файл.
-    """
+def download_video(url: str, format_id: str):
     try:
         logger.info(f"Start downloading: {url}, format: {format_id}+bestaudio")
 
-        # Предварительная проверка размера
         pre_opts = build_opts()
         with YoutubeDL(pre_opts) as ydl:
             pre_info = ydl.extract_info(url, download=False)
 
-        # Настройки для скачивания
         download_opts = YDL_OPTS.copy()
         download_opts['format'] = f"{format_id}+bestaudio"
 
@@ -72,21 +67,19 @@ def download_video(url: str, format_id: str, ext: str):
             info = ydl.extract_info(url, download=True)
             filepath = ydl.prepare_filename(info)
 
-        # Проверка размера после загрузки
         final_size = os.path.getsize(filepath)
         if final_size > MAX_FILE_SIZE:
             os.remove(filepath)
             raise ValueError(f"Файл слишком большой: {final_size/1024**2:.1f} MB")
 
         tempExt = os.path.splitext(filepath)[1]
-
         new_name = safe_filename(tempExt)
         new_path = os.path.join(DOWNLOAD_DIR, new_name)
 
         os.rename(filepath, new_path)
 
         logger.info(f"Downloaded successfully: {new_path} ({final_size/1024**2:.1f} MB)")
-        return new_name
+        return new_path
 
     except Exception as e:
         logger.error(f"Ошибка при загрузке файла: {e}")
