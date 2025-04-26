@@ -1,47 +1,30 @@
-﻿import os
+﻿import asyncio
 import logging
-import asyncio
-import re
-
+import os
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
+from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from aiogram.filters import Command
 from aiohttp import web
 
-from downloader import get_video_formats, download_video
-from config import BOT_TOKEN, DOWNLOAD_DIR, PUBLIC_URL, PORT, ADMIN_ID, ADMIN_COMMAND
-from utils import *
-from urllib.parse import quote, unquote
+from config import BOT_TOKEN, ADMIN_ID, ADMIN_COMMAND, DOWNLOAD_DIR, PUBLIC_URL
+from utils import normalize_youtube_url, build_formats_keyboard
+from downloader import download_video, get_video_formats
 
 # Логирование
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("bot")
 
-# Бот
+# Бот и диспетчер
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-user_data = {}
-async def set_default_commands(bot):
-    await bot.set_my_commands([BotCommand(command="start", description="Пингануть")])
+# ==== Хэндлер команды /start ====
 
 @dp.message(Command("start"))
-async def cmd_start(message: Message):
-    await message.answer("👋 Отправьте ссылку на видео с YouTube для скачивания!")
+async def start_handler(message: Message):
+    await message.answer("👋 Отправьте ссылку на YouTube-видео для скачивания!")
 
-
-# Веб-сервер для файлов
-async def start_web_app():
-    app = web.Application()
-    app.router.add_static('/downloads', DOWNLOAD_DIR, show_index=False)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", PORT)
-    await site.start()
-    logger.info(f"🌐 Web server started at {PUBLIC_URL}/downloads")
-
-
-from urllib.parse import quote  # В начале файла добавь импорт!
+# ==== Хэндлер команды для админа ====
 
 @dp.message(Command(ADMIN_COMMAND))
 async def admin_handler(message: Message):
@@ -56,25 +39,21 @@ async def admin_handler(message: Message):
 
     keyboard = []
     for file in files:
-        safe_file = quote(file)  # Экранируем имя файла для передачи в callback_data
-        keyboard.append([
-            InlineKeyboardButton(text=f"❌ {file}", callback_data=f"delete|{safe_file}")
-        ])
+        keyboard.append([InlineKeyboardButton(text=f"❌ {file}", callback_data=f"delete:{file}")])
 
     kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
     await message.answer("🛠️ Файлы на сервере:", reply_markup=kb)
 
+# ==== Хэндлер удаления файла админом ====
 
-@dp.callback_query(F.data.startswith("delete|"))
+@dp.callback_query(F.data.startswith("delete:"))
 async def delete_file(call: CallbackQuery):
     if call.from_user.id != ADMIN_ID:
         await call.answer("🚫 Нет доступа.", show_alert=True)
         return
 
-    encoded_filename = call.data.split("delete|")[1]
-    filename = unquote(encoded_filename)  # Декодируем обратно оригинальное имя файла
+    filename = call.data.split("delete:")[1]
     path = os.path.join(DOWNLOAD_DIR, filename)
-
     if os.path.exists(path):
         os.remove(path)
         await call.answer(f"✅ Удалено {filename}")
@@ -82,77 +61,73 @@ async def delete_file(call: CallbackQuery):
     else:
         await call.answer("⚠️ Файл не найден.")
 
+# ==== Прием ссылки от пользователя ====
 
-
-# Обработчик обычного текста (ссылок)
 @dp.message()
 async def catch_url(message: Message):
-    url = normalize_youtube_url(message.text)
-
-    if not url.startswith("http"):
-        await message.answer("❌ Это не ссылка.")
-        return
+    url = message.text.strip()
+    url = normalize_youtube_url(url)
 
     await message.answer("🔎 Ищу доступные форматы...")
+    formats = await get_video_formats(url)
 
-    formats = get_video_formats(url)
     if not formats:
-        await message.answer("❌ Не удалось получить форматы.")
+        await message.answer("❌ Не удалось получить форматы видео.")
         return
 
-    seen = set()
-    keyboard = []
+    kb = build_formats_keyboard(formats, url)
+    await message.answer("🔻 Выберите качество и формат:", reply_markup=kb)
 
-    for fmt in formats:
-        key = f"{fmt['resolution']}_{fmt['ext']}"
-        if key not in seen:
-            seen.add(key)
-            keyboard.append([
-                InlineKeyboardButton(
-                    text=f"{fmt['resolution']} .{fmt['ext']}",
-                    callback_data=f"{fmt['format_id']}"
-                )
-            ])
+# ==== Выбор формата ====
 
-    kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
-    user_data[message.chat.id] = url
-    await message.answer("🔻 Выбери качество:", reply_markup=kb)
+@dp.callback_query(F.data.startswith("format|"))
+async def process_choice(callback: CallbackQuery):
+    await callback.answer()
 
+    _, itag, url, ext = callback.data.split("|", 3)
+    progress_message = await callback.message.answer("⏳ Загружаю видео...")
 
-# Обработчик выбора формата
-@dp.callback_query()
-async def process_choice(call: CallbackQuery):
-    chat_id = call.message.chat.id
-    format_id = call.data
-    url = user_data.get(chat_id)
+    filepath = await download_video(url, itag, ext)
 
-    if not url:
-        await call.answer("❗ Истекло время ссылки.")
-        return
+    if filepath:
+        filename = os.path.basename(filepath)
+        public_url = f"{PUBLIC_URL}/downloads/{filename}"
 
-    progress_message = await bot.send_message(chat_id=chat_id, text="⏳ Загружаю файл...")
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="📩 Скачать файл", url=public_url)]
+            ]
+        )
+        await progress_message.edit_text(f"✅ Файл готов!\n{public_url}", reply_markup=kb)
+    else:
+        await progress_message.edit_text("❌ Ошибка при загрузке видео.")
 
-    filename = download_video(url, format_id)
+# ==== AIOHTTP для отдачи файлов ====
 
-    if not filename:
-        await progress_message.edit_text("❌ Ошибка загрузки файла.")
-        return
+async def downloads_handler(request):
+    filename = request.match_info['filename']
+    path = os.path.join(DOWNLOAD_DIR, filename)
+    if not os.path.isfile(path):
+        return web.Response(status=404, text="File not found")
+    return web.FileResponse(path)
 
-    safe_filename = quote(os.path.basename(filename))  # <-- исправление: экранируем имя файла
-    public_url = f"{PUBLIC_URL}/downloads/{safe_filename}"
+async def start_web_app():
+    app = web.Application()
+    app.router.add_get('/downloads/{filename}', downloads_handler)
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📥 Скачать файл", url=public_url)]
-    ])
+    runner = web.AppRunner(app)
+    await runner.setup()
 
-    await progress_message.edit_text(f"✅ Файл готов!\n{public_url}", reply_markup=keyboard)
+    port = int(os.getenv("PORT", 8080))  # Railway даёт PORT в env
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"✅ HTTP сервер запущен на порту {port}")
 
+# ==== MAIN ====
 
-# Запуск
 async def main():
     await start_web_app()
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
