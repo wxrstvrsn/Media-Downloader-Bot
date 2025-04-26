@@ -47,7 +47,7 @@ def safe_filename(ext: str) -> str:
         f for f in os.listdir(DOWNLOAD_DIR)
         if os.path.isfile(os.path.join(DOWNLOAD_DIR, f))
     ])
-    return f"filename_{total_files + 1}.{ext}"
+    return f"filename_{total_files + 1}{ext}"
 
 def download_video(url: str, format_id: str, ext: str):
     """
