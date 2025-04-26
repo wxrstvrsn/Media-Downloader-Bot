@@ -8,7 +8,7 @@ from aiogram.filters import Command
 from aiohttp import web
 
 from downloader import get_video_formats, download_video
-from config import BOT_TOKEN, DOWNLOAD_DIR, PUBLIC_URL, PORT, ADMIN_ID
+from config import BOT_TOKEN, DOWNLOAD_DIR, PUBLIC_URL, PORT, ADMIN_ID, ADMIN_COMMAND
 from utils import *
 
 # Логирование
@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 # Бот
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+user_data = {}
 
 # Веб-сервер для файлов
 async def start_web_app():
@@ -30,88 +32,100 @@ async def start_web_app():
     logger.info(f"🌐 Web server started at {PUBLIC_URL}/downloads")
 
 # Обработчик команды /start
-@dp.message(Command("start"))
-async def cmd_start(message: Message):
-    await message.answer("👋 Отправь ссылку на видео!")
-
-# Обработчик команды /admin
-@dp.message(Command("admin"))
+@dp.message(Command(ADMIN_COMMAND))
 async def admin_handler(message: Message):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("🚫 Доступ запрещён.")
+        await message.answer("🚫 У вас нет прав для этой команды.")
         return
 
     files = os.listdir(DOWNLOAD_DIR)
     if not files:
-        await message.answer("📂 Папка downloads пуста.")
+        await message.answer("📂 Папка загрузок пуста.")
         return
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for filename in files:
-        button = InlineKeyboardButton(
-            text=f"📄 {filename}",
-            url=f"{PUBLIC_URL}/downloads/{filename}"
-        )
-        kb.inline_keyboard.append([button])
+    keyboard = []
+    for file in files:
+        keyboard.append([
+            InlineKeyboardButton(text=f"❌ {file}", callback_data=f"delete:{file}")
+        ])
 
+    kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
     await message.answer("🛠️ Файлы на сервере:", reply_markup=kb)
 
+@dp.callback_query(F.data.startswith("delete:"))
+async def delete_file(call: CallbackQuery):
+    if call.from_user.id != ADMIN_ID:
+        await call.answer("🚫 Нет доступа.", show_alert=True)
+        return
+
+    filename = call.data.split("delete:")[1]
+    path = os.path.join(DOWNLOAD_DIR, filename)
+    if os.path.exists(path):
+        os.remove(path)
+        await call.answer(f"✅ Удалено {filename}")
+        await call.message.delete()
+    else:
+        await call.answer("⚠️ Файл не найден.")
 
 # Обработчик обычного текста (ссылок)
 @dp.message()
 async def catch_url(message: Message):
-    url = normalize_youtube_url(message.text.strip())
-    if not url:
-        await message.answer("❌ Неверная ссылка. Отправьте корректную ссылку на YouTube-видео.")
+    url = normalize_youtube_url(message.text)
+
+    if not url.startswith("http"):
+        await message.answer("❌ Это не ссылка.")
         return
 
     await message.answer("🔎 Ищу доступные форматы...")
+
     formats = get_video_formats(url)
     if not formats:
-        await message.answer("❌ Не удалось получить форматы видео.")
+        await message.answer("❌ Не удалось получить форматы.")
         return
 
-    # Убираем дубликаты форматов
     seen = set()
-    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    keyboard = []
 
     for fmt in formats:
-        resolution = fmt["resolution"]
-        ext = fmt["ext"]
-        itag = fmt["itag"]
+        key = f"{fmt['resolution']}_{fmt['ext']}"
+        if key not in seen:
+            seen.add(key)
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"{fmt['resolution']} .{fmt['ext']}",
+                    callback_data=f"{fmt['format_id']}"
+                )
+            ])
 
-        key = (resolution, ext)
-        if key in seen:
-            continue
-        seen.add(key)
-
-        button = InlineKeyboardButton(
-            text=f"{resolution} .{ext}",
-            callback_data=f"format|{itag}|{url}"
-        )
-        kb.inline_keyboard.append([button])
-
-    await message.answer("🔻 Выберите качество:", reply_markup=kb)
+    kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    user_data[message.chat.id] = url
+    await message.answer("🔻 Выбери качество:", reply_markup=kb)
 
 # Обработчик выбора формата
-@dp.callback_query(F.data.startswith("format|"))
-async def format_chosen(callback: CallbackQuery):
-    await callback.answer()
-    _, itag, url = callback.data.split("|", 2)
+@dp.callback_query()
+async def process_choice(call: CallbackQuery):
+    chat_id = call.message.chat.id
+    format_id = call.data
+    url = user_data.get(chat_id)
 
-    msg = await callback.message.answer("⏳ Загружаю видео...")
+    if not url:
+        await call.answer("❗ Истекло время ссылки.")
+        return
 
-    filename = await download_video(url, itag)
-    if filename:
-        file_url = f"{PUBLIC_URL}/downloads/{filename}"
+    progress_message = await bot.send_message(chat_id=chat_id, text="⏳ Загружаю файл...")
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📥 Скачать видео", url=file_url)]
-        ])
+    filename = download_video(url, format_id, DOWNLOAD_DIR)
 
-        await msg.edit_text("✅ Файл загружен!", reply_markup=keyboard)
-    else:
-        await msg.edit_text("❌ Ошибка при загрузке файла.")
+    if not filename:
+        await progress_message.edit_text("❌ Ошибка загрузки файла.")
+        return
+
+    public_url = f"{PUBLIC_URL}/downloads/{os.path.basename(filename)}"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📥 Скачать файл", url=public_url)]
+    ])
+
+    await progress_message.edit_text(f"✅ Файл готов!\n{public_url}", reply_markup=keyboard)
 
 # Запуск
 async def main():
