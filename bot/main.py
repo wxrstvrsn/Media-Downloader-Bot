@@ -40,7 +40,7 @@ user_requests = {}
 async def start_handler(message: types.Message):
     await message.answer("👋 Отправьте ссылку на видео!")
 
-@dp.message(Command("bigDickBackInTown"))
+@dp.message(Command("REMOVED"))
 async def admin_command(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         await message.answer("⛔ Доступ запрещён.")
