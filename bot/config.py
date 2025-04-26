@@ -6,7 +6,7 @@ DOMAIN = os.getenv("DOMAIN")
 DOWNLOAD_DIR = "bot/downloads"
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 ADMIN_COMMAND = os.getenv("ADMIN_COMMAND")
-MAX_FILE_SIZE = 5000 * 1024 * 1024  # 500 MB
+MAX_FILE_SIZE = 480 * 1024 * 1024  # 480 MB
 
 YDL_OPTS = {
     'outtmpl': DOWNLOAD_DIR + '/%(title)s.%(ext)s',

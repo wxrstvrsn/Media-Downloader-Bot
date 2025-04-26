@@ -1,6 +1,7 @@
 ﻿import logging
 import asyncio
 from aiogram import Bot, Dispatcher, F
+from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram import types
 from aiogram.filters import Command
@@ -8,6 +9,7 @@ from aiohttp import web
 from dotenv import load_dotenv
 from downloader import get_video_formats, download_video
 from config import *
+from utils import *
 
 # Логирование
 logging.basicConfig(level=logging.INFO)
@@ -19,20 +21,10 @@ load_dotenv()
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-user_data = {}
+file_callback = CallbackData("file", "filename")
+format_callback = CallbackData("format", "itag")
 
-def normalize_youtube_url(url: str) -> str:
-    """Приводит ссылку к нормальному виду."""
-    url = url.strip()
-    if "youtu.be/" in url:
-        video_id = url.split("youtu.be/")[1].split("?")[0]
-        return f"https://www.youtube.com/watch?v={video_id}"
-    if "shorts/" in url:
-        video_id = url.split("shorts/")[1].split("?")[0]
-        return f"https://www.youtube.com/watch?v={video_id}"
-    if "m.youtube.com" in url:
-        url = url.replace("m.youtube.com", "youtube.com")
-    return url
+user_data = {}
 
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
@@ -41,7 +33,7 @@ async def start_handler(message: types.Message):
 @dp.message(Command(ADMIN_COMMAND))
 async def admin_handler(message: types.Message):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("🚫 У вас нет прав для этой команды.")
+        await message.answer("❌ У тебя нет доступа к этой команде.")
         return
 
     files = os.listdir(DOWNLOAD_DIR)
@@ -49,15 +41,17 @@ async def admin_handler(message: types.Message):
         await message.answer("📂 Папка загрузок пуста.")
         return
 
-    keyboard = []
+    kb = InlineKeyboardMarkup(row_width=1)
     for file in files:
-        keyboard.append([
-            InlineKeyboardButton(text=f"❌ {file}", callback_data=f"delete:{file}")
-        ])
+        short_name = file if len(file) <= 40 else file[:37] + "..."
+        kb.add(
+            InlineKeyboardButton(
+                text=short_name,
+                callback_data=file_callback.new(filename=file)
+            )
+        )
 
-    kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
-    await message.answer("🛠️ Файлы на сервере:", reply_markup=kb)
-
+    await message.answer("🛠️ Доступные файлы на сервере:", reply_markup=kb)
 @dp.callback_query(F.data.startswith("delete:"))
 async def delete_file(call: types.CallbackQuery):
     if call.from_user.id != ADMIN_ID:
