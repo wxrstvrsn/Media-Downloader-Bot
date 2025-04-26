@@ -21,6 +21,10 @@ logger = logging.getLogger("bot")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+
 # ==== Хэндлер команды /start ====
 
 @dp.message(Command("start"))

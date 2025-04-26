@@ -81,7 +81,7 @@ def download_video(url: str, format_id: str):
 
         logger.info(f"Downloaded successfully: {new_path} ({final_size / 1024 ** 2:.1f} MB)")
 
-        return new_path
+        return os.path.basename(new_path)
 
     except Exception as e:
         logger.error(f"Ошибка при загрузке файла: {e}")
