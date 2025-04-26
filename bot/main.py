@@ -69,7 +69,7 @@ async def catch_url(message: Message):
     url = normalize_youtube_url(url)
 
     await message.answer("🔎 Ищу доступные форматы...")
-    formats = await get_video_formats(url)
+    formats = get_video_formats(url)
 
     if not formats:
         await message.answer("❌ Не удалось получить форматы видео.")
