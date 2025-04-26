@@ -1,4 +1,5 @@
-﻿import asyncio
+﻿# created by wxrstvrsn
+import asyncio
 import logging
 import os
 

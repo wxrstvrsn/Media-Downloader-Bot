@@ -1,4 +1,5 @@
-﻿import os
+﻿# created by wxrstvrsn
+import os
 import logging
 from yt_dlp import YoutubeDL
 from config import YDL_OPTS, MAX_FILE_SIZE, DOWNLOAD_DIR

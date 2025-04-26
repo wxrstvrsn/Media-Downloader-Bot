@@ -1,4 +1,5 @@
-﻿from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+﻿# created by wxrstvrsn
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 def normalize_youtube_url(url: str) -> str:
     url = url.strip()

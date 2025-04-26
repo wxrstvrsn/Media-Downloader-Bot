@@ -1,4 +1,5 @@
-﻿import os
+﻿# created by wxrstvrsn
+import os
 
 # Базовый URL вашего сервиса, например "https://<app>.up.railway.app"
 PUBLIC_URL = os.getenv("PUBLIC_URL")
