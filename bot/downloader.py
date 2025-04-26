@@ -1,7 +1,7 @@
 ﻿import os
 import logging
 from yt_dlp import YoutubeDL
-from config import YDL_OPTS, MAX_FILE_SIZE
+from config import YDL_OPTS, MAX_FILE_SIZE, DOWNLOAD_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,12 @@ def get_video_formats(url: str):
         logger.error(f"Ошибка при получении форматов: {e}")
         return []
 
+def safe_filename(ext: str) -> str:
+    total_files = len([
+        f for f in os.listdir(DOWNLOAD_DIR)
+        if os.path.isfile(os.path.join(DOWNLOAD_DIR, f))
+    ])
+    return f"filename_{total_files + 1}.{ext}"
 
 def download_video(url: str, format_id: str, ext: str):
     """
@@ -72,8 +78,14 @@ def download_video(url: str, format_id: str, ext: str):
             os.remove(filepath)
             raise ValueError(f"Файл слишком большой: {final_size/1024**2:.1f} MB")
 
-        logger.info(f"Downloaded successfully: {filepath} ({final_size/1024**2:.1f} MB)")
-        return filepath
+        ext = ext or "mp4"
+        new_filename = safe_filename(ext)
+        new_path = os.path.join(DOWNLOAD_DIR, new_filename)
+
+        os.rename(filepath, new_path)
+
+        logger.info(f"Downloaded successfully: {new_path} ({final_size/1024**2:.1f} MB)")
+        return new_filename
 
     except Exception as e:
         logger.error(f"Ошибка при загрузке файла: {e}")

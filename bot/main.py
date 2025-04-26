@@ -1,6 +1,7 @@
 ﻿import os
 import logging
 import asyncio
+import re
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
@@ -21,8 +22,6 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 user_data = {}
-
-
 async def set_default_commands(bot):
     await bot.set_my_commands([BotCommand(command="start", description="Пингануть")])
 
